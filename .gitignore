@@ -1,0 +1,19 @@
+# data
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+build/
+dist/
+*.egg-info/
+
+# scratch
+research/
+shots/
+.vscode/
+.DS_Store

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Macro State Board</title>
+<link rel="stylesheet" href="/static/css/app.css" />
+<script>
+  try {
+    var t = new URLSearchParams(location.search).get("theme") || localStorage.getItem("msb.theme");
+    if (t) document.documentElement.setAttribute("data-theme", t);
+  } catch (e) {}
+</script>
+</head>
+<body>
+
+<header class="bar">
+  <div class="brand">
+    <span class="mark"></span>
+    <span class="name">Macro State Board</span>
+    <span class="sub">US · aggregate first</span>
+  </div>
+  <div class="bar-mid"><span class="asof" id="asof">loading…</span></div>
+  <nav class="seg" id="range-seg" aria-label="range">
+    <button data-years="3">3Y</button>
+    <button data-years="10" aria-pressed="true">10Y</button>
+    <button data-years="0">Max</button>
+  </nav>
+  <button class="icon" id="theme-toggle" title="Toggle theme" aria-label="Toggle theme">◐</button>
+</header>
+
+<main class="wrap" id="app">
+
+  <section class="hero" id="hero" aria-label="aggregate indicators"></section>
+
+  <section class="grid">
+    <article class="card span-7">
+      <header class="card-head">
+        <div>
+          <h2>Regime clock</h2>
+          <p>growth composite (x) vs inflation composite (y) · monthly · sigma</p>
+        </div>
+        <span class="chip" id="regime-chip"></span>
+      </header>
+      <div class="regime-body">
+        <div class="regime-chart" id="regime-chart"></div>
+        <div class="regime-side">
+          <div class="phase">
+            <span class="k">current phase</span>
+            <strong id="phase-name">—</strong>
+            <p id="phase-desc"></p>
+          </div>
+          <div class="phase ghost">
+            <span class="k">how to read it</span>
+            <p>Both axes are weighted composites, not single series. The trail is the last
+              three years; faint dots are older. Quadrant names are descriptive, not forecasts.</p>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <article class="card span-5">
+      <header class="card-head">
+        <div>
+          <h2>Cycle checklist</h2>
+          <p>six thresholds · latest observation</p>
+        </div>
+        <span class="chip" id="checklist-chip"></span>
+      </header>
+      <ul class="checklist" id="checklist"></ul>
+      <p class="fine" id="checklist-note"></p>
+    </article>
+  </section>
+
+  <section class="grid">
+    <article class="card span-12">
+      <header class="card-head">
+        <div>
+          <h2>Composite decomposition</h2>
+          <p>what is moving the aggregate right now · contribution to the latest reading</p>
+        </div>
+        <nav class="tabs" id="decomp-tabs"></nav>
+      </header>
+      <div class="decomp-wrap">
+        <div class="decomp-chart" id="decomp-chart"></div>
+        <aside class="decomp-side" id="decomp-side"></aside>
+      </div>
+    </article>
+  </section>
+
+  <section class="grid" id="charts"></section>
+
+  <section class="grid">
+    <article class="card span-12">
+      <header class="card-head">
+        <div>
+          <h2>State vector</h2>
+          <p>aggregates first, inputs below · z vs trailing 10 years</p>
+        </div>
+        <span class="chip muted" id="state-count"></span>
+      </header>
+      <div class="table-wrap">
+        <table class="state" id="state-table">
+          <thead>
+            <tr><th>Indicator</th><th>Last</th><th>3M Δ</th><th>z</th><th>%ile</th><th>Signal</th><th>Trend</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </article>
+  </section>
+
+  <footer class="foot">
+    <div class="foot-col span-7">
+      <h3>Data provenance</h3>
+      <table class="prov" id="prov-table"><tbody></tbody></table>
+    </div>
+    <div class="foot-col span-5">
+      <h3>Method &amp; caveats</h3>
+      <div class="notes" id="notes"></div>
+    </div>
+  </footer>
+</main>
+
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <button class="drawer-close" id="drawer-close" aria-label="Close">×</button>
+  <div class="drawer-body" id="drawer-body"></div>
+</aside>
+<div class="scrim" id="scrim"></div>
+
+<script src="/static/vendor/echarts.min.js"></script>
+<script type="module" src="/static/js/app.js"></script>
+</body>
+</html>
