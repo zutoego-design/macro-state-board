@@ -387,6 +387,82 @@ def state(conn, snap, cat) -> list[dict]:
     return out
 
 
+# ---------------------------------------------------------------------------
+# daily panel — one row per business day, one column per series
+# ---------------------------------------------------------------------------
+
+def daily_meta(conn) -> dict:
+    row = conn.execute(
+        "SELECT MIN(date) AS a, MAX(date) AS b, COUNT(*) AS n FROM daily_wide"
+    ).fetchone()
+    if not row or not row["n"]:
+        return {"start": None, "end": None, "rows": 0, "columns": []}
+    cols = [dict(r) for r in conn.execute(
+        "SELECT * FROM daily_column ORDER BY layer DESC, series_id")]
+    return {"start": row["a"], "end": row["b"], "rows": row["n"], "columns": cols}
+
+
+def _titles(conn) -> dict[str, str]:
+    return {r["series_id"]: (r["short_title"] or r["title"]) for r in db.catalog(conn)}
+
+
+def daily_tape(conn, date: str | None = None) -> dict:
+    """The panel's most recent business day, with the age of every cell."""
+    meta = daily_meta(conn)
+    if not meta["rows"]:
+        return {"date": None, "items": []}
+    d = date or meta["end"]
+    row = conn.execute("SELECT * FROM daily_wide WHERE date=?", (d,)).fetchone()
+    age = conn.execute("SELECT * FROM daily_age WHERE date=?", (d,)).fetchone()
+    if row is None:
+        return {"date": d, "items": []}
+    titles = _titles(conn)
+    items = []
+    for c in meta["columns"]:
+        v = row[c["col"]] if c["col"] in row.keys() else None
+        items.append({
+            "id": c["series_id"],
+            "title": titles.get(c["series_id"], c["series_id"]),
+            "col": c["col"],
+            "layer": c["layer"], "freq": c["freq"], "unit": c["unit"],
+            "value": (round(v, 4) if v is not None else None),
+            "age_days": (age[c["col"]] if age is not None and c["col"] in age.keys() else None),
+        })
+    items.sort(key=lambda x: (x["age_days"] if x["age_days"] is not None else 10**6, x["id"]))
+    fresh = sum(1 for i in items if i["age_days"] == 0)
+    return {"date": d, "items": items, "fresh": fresh, "total": len(items)}
+
+
+def daily_slice(conn, *, start: str | None = None, end: str | None = None,
+                ids: list[str] | None = None, limit: int = 5000) -> dict:
+    """Wide slice as arrays: cheap to transfer, easy to pivot client-side."""
+    import pandas as pd
+
+    meta = daily_meta(conn)
+    if not meta["rows"]:
+        return {"date": [], "columns": [], "rows": []}
+    cols = meta["columns"]
+    if ids:
+        wanted = {column_of(s) for s in ids} | set(ids)
+        cols = [c for c in cols if c["col"] in wanted or c["series_id"] in ids]
+    selected = ["date"] + [c["col"] for c in cols]
+    start = start or "1900-01-01"
+    end = end or meta["end"]
+    sql = (f"SELECT {','.join('\"' + c + '\"' for c in selected)} FROM daily_wide "
+           f"WHERE date BETWEEN ? AND ? ORDER BY date DESC LIMIT ?")
+    frame = pd.read_sql_query(sql, conn, params=(start, end, limit))
+    frame = frame.iloc[::-1].reset_index(drop=True)
+    return {
+        "columns": [{k: c[k] for k in ("col", "series_id", "layer", "freq", "unit")} for c in cols],
+        "dates": frame["date"].tolist(),
+        "rows": frame.drop(columns=["date"]).values.tolist(),
+    }
+
+
+def column_of(series_id: str) -> str:
+    return series_id.replace(".", "_").replace("-", "_")
+
+
 def provenance(conn) -> list[dict]:
     out = []
     for r in db.catalog(conn):

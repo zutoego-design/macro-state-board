@@ -18,4 +18,6 @@ export const api = {
   series: (ids, years = 0) =>
     j(`${BASE}/series?ids=${encodeURIComponent(ids.join(","))}&years=${years}`),
   one: (id, years = 0) => j(`${BASE}/series/${encodeURIComponent(id)}?years=${years}`),
+  dailyTape: () => j(`${BASE}/daily/tape`),
+  dailyMeta: () => j(`${BASE}/daily/meta`),
 };

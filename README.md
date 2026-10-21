@@ -127,6 +127,35 @@ the most recent earlier vintage for series the run did not refresh.
 So a past view can be replayed exactly, and a revision shows up as a second vintage rather
 than a silent overwrite.
 
+### Daily panel
+
+The observation table is period-based on purpose: a daily yield, a monthly PCE print and a
+quarterly GDP figure are different kinds of fact. Analysis needs the opposite shape, so
+`macroboard daily` projects everything onto one **business-day grid** and writes two wide
+tables:
+
+| table | shape | content |
+|---|---|---|
+| `daily_wide` | 27.5k rows × 40 columns | one row per business day, one column per series, forward filled |
+| `daily_age` | same shape | how many days old that cell's source print is |
+| `daily_column` | 40 rows | maps SQL-safe column names (`us_rates_ust10y`) back to `series_id` |
+
+Two rules make it safe to use:
+
+1. **No look-ahead.** A value enters the panel only once it is knowable: a daily close at the
+   end of its own day, a monthly or quarterly print on the first day *after* the period it
+   describes has closed. That is a lower bound on the real release date, and the only
+   defensible rule without a release calendar.
+2. **Age is a column, not a footnote.** `daily_age` lets you filter to "cells younger than
+   five days" instead of silently regressing on a carried-forward GDP print.
+
+Because monthly prints only enter after the month closes, composites in the daily panel are
+one month behind the dashboard's state readout, which deliberately uses the in-progress
+month. That difference is stated here rather than smoothed over.
+
+Endpoints: `GET /api/daily/tape` (latest day, with ages), `GET /api/daily?start=&end=&ids=`
+(arrays, for analysis), `GET /api/daily.csv` (the whole table).
+
 ### Tracker
 
 Revision history is not free: providers publish, revise, and never keep the first print.
@@ -148,7 +177,10 @@ for. Schedule it with Task Scheduler (or cron) alongside a weekly `refresh`.
 | `GET /api/meta` | vintage, layer counts, tracker status, recent runs |
 | `GET /api/trackers` | today's prints and what moved |
 | `GET /api/provenance` | source table |
-| `GET /api/runs` | pipeline run log |
+'| `GET /api/daily/tape` | latest business day, every series with its data age |
+| `GET /api/daily?start=&end=&ids=` | wide slice as arrays |
+| `GET /api/daily.csv` | the whole daily panel |
+| `GET /api/runs` | pipeline run log |'
 
 ---
 
@@ -177,7 +209,7 @@ macroboard/
     db.py               vintage-correct reads/writes
     catalog.py          raw + derived + breadth + composite declarations
     providers/          dbnomics, yahoo, oecd adapters + http cache
-    pipeline/           ingest, derive, breadth, composite, track
+    pipeline/           ingest, derive, breadth, composite, daily, track
     api/                FastAPI app + read model
     cli.py              init / refresh / serve / track / status
   web/                  static frontend (ECharts, no build step)

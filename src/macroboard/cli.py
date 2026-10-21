@@ -89,6 +89,24 @@ def cmd_refresh(_args) -> int:
     derive.run(vintage=ing["vintage"])
     _banner("L2 composites")
     composite.run(vintage=ing["vintage"])
+    _banner("daily panel")
+    try:
+        from .pipeline import daily
+        res = daily.run()
+        print(f"  daily_wide: {res['rows']:,} rows x {res['cols']} columns "
+              f"({res['start']} .. {res['end']})")
+    except Exception as exc:
+        print(f"  daily panel failed: {exc!r}")
+    return 0
+
+
+def cmd_daily(args) -> int:
+    """Rebuild the business-day wide panel from the current vintage."""
+    from .pipeline import daily
+
+    res = daily.run(start=getattr(args, "start", None))
+    print(f"  daily_wide: {res['rows']:,} rows x {res['cols']} columns "
+          f"({res['start']} .. {res['end']})")
     return 0
 
 
@@ -149,6 +167,9 @@ def build_parser() -> argparse.ArgumentParser:
     ]:
         sp = sub.add_parser(name)
         sp.set_defaults(func=fn)
+    sp = sub.add_parser("daily")
+    sp.add_argument("--start", default=None, help="grid start date, YYYY-MM-DD")
+    sp.set_defaults(func=cmd_daily)
     sp = sub.add_parser("audit")
     sp.add_argument("--json", action="store_true")
     sp.set_defaults(func=cmd_audit)

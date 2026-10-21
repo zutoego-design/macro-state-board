@@ -388,3 +388,32 @@ table.prov td:first-child { color: var(--ink-2); }
   font-family: var(--mono); font-size: 9.5px; letter-spacing: .04em; color: var(--faint);
 }
 .asof-line b { color: var(--ink-2); font-weight: 500; }
+/* ---------- daily tape ------------------------------------- */
+.tape-actions { display: flex; align-items: center; gap: 8px; }
+.chip.link { text-decoration: none; color: var(--muted); }
+.chip.link:hover { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 40%, var(--hair)); }
+.tape {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 8px;
+}
+.tile {
+  border: 1px solid var(--hair); border-radius: 9px; padding: 8px 10px;
+  background: var(--panel-2); position: relative; overflow: hidden;
+}
+.tile .k {
+  font-family: var(--mono); font-size: 8.5px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--muted); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.tile .v { font-size: 15px; font-weight: 300; letter-spacing: -.01em; margin-top: 3px; }
+.tile .a {
+  font-family: var(--mono); font-size: 8.5px; color: var(--faint); margin-top: 2px;
+}
+.tile::after {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px;
+  background: var(--faint);
+}
+.tile[data-age="fresh"]::after { background: var(--pos); }
+.tile[data-age="recent"]::after { background: var(--teal); }
+.tile[data-age="stale"]::after { background: var(--warn); }
+.tile[data-age="old"]::after { background: var(--neg); }

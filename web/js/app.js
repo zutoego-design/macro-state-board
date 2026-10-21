@@ -309,6 +309,37 @@ async function openDrawer(id) {
   }
 }
 
+/* ---------- daily tape ------------------------------------- */
+
+function ageClass(age) {
+  if (age == null) return "old";
+  if (age <= 1) return "fresh";
+  if (age <= 10) return "recent";
+  if (age <= 60) return "stale";
+  return "old";
+}
+
+function renderTape(tape) {
+  const host = $("#tape");
+  if (!host) return;
+  host.innerHTML = tape.items.map((i) => {
+    const v = i.value == null ? "—"
+      : Math.abs(i.value) >= 1000 ? i.value.toLocaleString(undefined, { maximumFractionDigits: 0 })
+      : i.value.toFixed(2);
+    const age = i.age_days == null ? "no data" : i.age_days === 0 ? "today" : `${i.age_days}d old`;
+    return `<div class="tile" data-age="${ageClass(i.age_days)}" title="${i.id} · ${i.freq} · ${i.layer}">
+      <div class="k">${i.title}</div>
+      <div class="v">${v}</div>
+      <div class="a">${age}</div>
+    </div>`;
+  }).join("");
+  const fresh = tape.items.filter((i) => (i.age_days ?? 99) <= 1).length;
+  $("#tape-count").textContent = `${tape.date} · ${fresh}/${tape.total} fresh (≤1d)`;
+  $("#tape-sub").textContent =
+    `one row per business day · value = last known print · age = days since it was knowable · ` +
+    `monthly and quarterly prints enter only after their period closes, so composites here are the last closed month`;
+}
+
 /* ---------- boot ------------------------------------------- */
 
 async function loadCharts() {
@@ -319,7 +350,7 @@ async function loadCharts() {
 }
 
 async function boot() {
-  const [ov, prov] = await Promise.all([api.overview(), api.provenance()]);
+  const [ov, prov, tape] = await Promise.all([api.overview(), api.provenance(), api.dailyTape()]);
   state.overview = ov;
   state.palette = C.palette();
 
@@ -337,6 +368,7 @@ async function boot() {
   renderState(ov.state);
   renderProv(prov.series);
   renderNotes(ov.notes);
+  renderTape(tape);
   await loadCharts();
 
   document.querySelectorAll("#range-seg button").forEach((b) => {

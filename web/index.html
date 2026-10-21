@@ -34,6 +34,21 @@
   <section class="hero" id="hero" aria-label="aggregate indicators"></section>
 
   <section class="grid">
+    <article class="card span-12" id="tape-card">
+      <header class="card-head">
+        <div>
+          <h2>Daily panel</h2>
+          <p id="tape-sub">one row per business day · every series aligned and filled</p>
+        </div>
+        <div class="tape-actions">
+          <span class="chip muted" id="tape-count"></span>
+          <a class="chip link" href="/api/daily.csv" download>download CSV</a>
+        </div>
+      </header>
+      <div class="tape" id="tape"></div>
+    </article>
+  </section>
+  <section class="grid">
     <article class="card span-7">
       <header class="card-head">
         <div>

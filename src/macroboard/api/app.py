@@ -107,6 +107,41 @@ def get_runs(limit: int = 20):
     return {"runs": db.recent_runs(_conn(), limit)}
 
 
+# ---- daily panel -----------------------------------------------------------
+
+@app.get("/api/daily/meta")
+def daily_meta():
+    return queries.daily_meta(_conn())
+
+
+@app.get("/api/daily/tape")
+def daily_tape(date: str | None = None):
+    return queries.daily_tape(_conn(), date)
+
+
+@app.get("/api/daily")
+def daily_panel(start: str | None = None, end: str | None = None,
+                ids: str | None = None, limit: int = 5000):
+    wanted = [s.strip() for s in ids.split(",")] if ids else None
+    return queries.daily_slice(_conn(), start=start, end=end, ids=wanted, limit=limit)
+
+
+@app.get("/api/daily.csv")
+def daily_csv():
+    """The whole wide panel as a CSV, regenerated on request."""
+    import pandas as pd
+    from fastapi.responses import FileResponse
+
+    out_dir = config.DATA / "export"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / "daily_wide.csv"
+    conn = _conn()
+    if not queries.daily_meta(conn)["rows"]:
+        raise HTTPException(status_code=404, detail="daily panel not built")
+    pd.read_sql_query("SELECT * FROM daily_wide ORDER BY date", conn).to_csv(path, index=False)
+    return FileResponse(path, media_type="text/csv", filename="daily_wide.csv")
+
+
 # ---- static frontend -------------------------------------------------------
 if config.WEB.exists():
     app.mount("/static", StaticFiles(directory=str(config.WEB)), name="static")
