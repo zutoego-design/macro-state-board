@@ -45,6 +45,19 @@ CREATE TABLE IF NOT EXISTS series (
 
 CREATE INDEX IF NOT EXISTS ix_series_layer ON series(layer, group_id);
 
+-- Per-period provenance for composites: which month the aggregate is stamped
+-- with, and how old its oldest input actually was. Without this a "2026-10"
+-- reading looks like an October observation when it may rest on August data.
+CREATE TABLE IF NOT EXISTS composite_meta (
+    composite_id    TEXT NOT NULL,
+    period          TEXT NOT NULL,
+    n_inputs        INTEGER,
+    weight_covered  REAL,
+    oldest_input    TEXT,
+    newest_input    TEXT,
+    PRIMARY KEY (composite_id, period)
+);
+
 -- Composite definitions: what goes into an aggregate and with what weight.
 -- Storing this makes an aggregate auditable instead of magic.
 CREATE TABLE IF NOT EXISTS composite_input (

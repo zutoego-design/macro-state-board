@@ -34,8 +34,12 @@ def cmd_init(_args) -> int:
         for inp in spec.get("inputs", []):
             rows.append({**inp, "composite_id": spec["series_id"]})
     m = db.upsert_composite_inputs(conn, rows)
+    retired = db.sync_active(conn, [s["series_id"] for s in
+                                    catalog.RAW + catalog.DERIVED + catalog.BREADTH
+                                    + catalog.COMPOSITES + catalog.TRACKED])
     print(f"database ready at {config.DB_PATH}")
-    print(f"catalogue: {n} series, {m} composite inputs")
+    print(f"catalogue: {n} series, {m} composite inputs"
+          + (f", {retired} retired" if retired else ""))
     return 0
 
 
@@ -112,6 +116,19 @@ def cmd_status(_args) -> int:
     return 0
 
 
+def cmd_audit(args) -> int:
+    """What is in the database, and are the dates aligned?"""
+    import json
+
+    from . import audit
+    res = audit.audit()
+    if getattr(args, "json", False):
+        print(json.dumps(res, indent=2, ensure_ascii=False))
+    else:
+        print(audit.render(res))
+    return 0
+
+
 def cmd_serve(args) -> int:
     import uvicorn
 
@@ -132,6 +149,9 @@ def build_parser() -> argparse.ArgumentParser:
     ]:
         sp = sub.add_parser(name)
         sp.set_defaults(func=fn)
+    sp = sub.add_parser("audit")
+    sp.add_argument("--json", action="store_true")
+    sp.set_defaults(func=cmd_audit)
     sp = sub.add_parser("serve")
     sp.add_argument("--host", default=config.HOST)
     sp.add_argument("--port", type=int, default=config.PORT)

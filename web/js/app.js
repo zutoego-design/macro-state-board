@@ -180,7 +180,11 @@ function renderDecomp(hero) {
     <h4>${item.title}</h4>
     <p>${item.method || ""}</p>
     <p style="margin-top:8px">Contributions are <code>weight × sign × z(input)</code>, divided by
-    the total absolute weight, so they add up to the ${signed(item.value)}σ reading.</p>`;
+    the total absolute weight, so they add up to the ${signed(item.value)}σ reading.</p>
+    ${item.inputs_as_of ? `<p class="asof-line">inputs as of
+      <b>${item.inputs_as_of.oldest}</b> → <b>${item.inputs_as_of.newest}</b>
+      · ${item.inputs_as_of.n_inputs} inputs
+      · coverage ${Math.round(item.inputs_as_of.weight_covered * 100)}%</p>` : ""}`;
 }
 
 /* ---------- charts ----------------------------------------- */
@@ -288,6 +292,7 @@ async function openDrawer(id) {
       <div class="drawer-chart"></div>
       <p><b>Method.</b> ${s.method || "—"}</p>
       <p><b>Question.</b> ${s.question || "—"}</p>
+      ${s.inputs_as_of ? `<p><b>Data age.</b> oldest input ${s.inputs_as_of.oldest}, newest ${s.inputs_as_of.newest} (${s.inputs_as_of.n_inputs} inputs, coverage ${Math.round(s.inputs_as_of.weight_covered * 100)}%).</p>` : ""}
       ${s.inputs ? `<p><b>Inputs.</b> ${s.inputs.map((i) =>
         `${i.title} (w ${i.weight}${i.sign < 0 ? ", −" : ", +"})`).join(" · ")}</p>` : ""}`;
     C.lineChart($(".drawer-chart", body), {

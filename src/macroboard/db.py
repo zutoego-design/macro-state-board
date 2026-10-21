@@ -156,12 +156,31 @@ def latest_vintage(conn, kind: str = "snapshot") -> int | None:
 
 
 def vintage_meta(conn, vintage_id: int | None = None) -> dict:
+    """Metadata for one vintage, always including how many vintages exist."""
     if vintage_id is None:
         vintage_id = latest_vintage(conn) or 0
     row = conn.execute("SELECT * FROM vintage WHERE vintage_id=?", (vintage_id,)).fetchone()
     n_vint = conn.execute("SELECT COUNT(*) FROM vintage WHERE kind='snapshot'").fetchone()[0]
-    return dict(row) if row else {"vintage_id": vintage_id, "as_of": None, "n_obs": 0,
-                                  "n_vintages": n_vint}
+    meta = dict(row) if row else {"vintage_id": vintage_id, "as_of": None, "n_obs": 0}
+    meta["n_vintages"] = n_vint
+    return meta
+
+
+def sync_active(conn, declared_ids: Iterable[str]) -> int:
+    """Deactivate catalogue rows that are no longer declared.
+
+    Without this, a series dropped from catalog.py keeps `is_active=1` and
+    shows up on the board forever as an empty row.
+    """
+    ids = list(declared_ids)
+    if not ids:
+        return 0
+    marks = ",".join("?" * len(ids))
+    cur = conn.execute(
+        f"UPDATE series SET is_active=0 WHERE is_active=1 AND series_id NOT IN ({marks})", ids
+    )
+    conn.commit()
+    return cur.rowcount
 
 
 def write_observations(conn, series_id: str, observations: Sequence[tuple[str, float | None]],
@@ -184,6 +203,42 @@ def bump_vintage_count(conn, vintage_id: int) -> int:
     conn.execute("UPDATE vintage SET n_obs=? WHERE vintage_id=?", (n, vintage_id))
     conn.commit()
     return int(n)
+
+
+def write_composite_meta(conn, rows: Iterable[dict]) -> int:
+    """Record, per composite month, how old its oldest input was."""
+    rows = list(rows)
+    if not rows:
+        return 0
+    ids = list({r["composite_id"] for r in rows})
+    conn.execute(
+        "DELETE FROM composite_meta WHERE composite_id IN (%s)" % ",".join("?" * len(ids)), ids
+    )
+    conn.executemany(
+        "INSERT INTO composite_meta (composite_id, period, n_inputs, weight_covered, "
+        "oldest_input, newest_input) VALUES (?,?,?,?,?,?) "
+        "ON CONFLICT(composite_id, period) DO UPDATE SET n_inputs=excluded.n_inputs, "
+        "weight_covered=excluded.weight_covered, oldest_input=excluded.oldest_input, "
+        "newest_input=excluded.newest_input",
+        [(r["composite_id"], r["period"], r["n_inputs"], r["weight_covered"],
+          r["oldest_input"], r["newest_input"]) for r in rows],
+    )
+    conn.commit()
+    return len(rows)
+
+
+def composite_meta(conn, composite_id: str, period: str | None = None) -> dict | None:
+    if period:
+        row = conn.execute(
+            "SELECT * FROM composite_meta WHERE composite_id=? AND period=?",
+            (composite_id, period),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT * FROM composite_meta WHERE composite_id=? ORDER BY period DESC LIMIT 1",
+            (composite_id,),
+        ).fetchone()
+    return dict(row) if row else None
 
 
 # ---------------------------------------------------------------------------

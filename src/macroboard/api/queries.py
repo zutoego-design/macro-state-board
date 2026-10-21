@@ -11,7 +11,7 @@ import datetime as dt
 import statistics
 
 from .. import catalog, db
-from ..pipeline import percentile_map
+from ..pipeline import percentile_map, to_monthly
 
 # NBER peak/trough months — public knowledge, hard-coded, not fetched.
 RECESSIONS = [
@@ -65,16 +65,26 @@ def yr_cut(rows: list[tuple[str, float]], years: float) -> list[tuple[str, float
     return [(p, v) for p, v in rows if to_iso(p) >= cut]
 
 
-def pct_rank(rows: list[tuple[str, float]], window: int = 120) -> float | None:
-    vals = [v for _, v in rows[-window:]]
+def _monthly(rows: list[tuple[str, float]], freq: str) -> list[tuple[str, float]]:
+    return to_monthly(rows, freq or "M")
+
+
+def pct_rank(rows: list[tuple[str, float]], freq: str = "M", window: int = 120) -> float | None:
+    """Share of the trailing 120 MONTHS at or below the latest reading.
+
+    Aggregating to months first matters: 120 daily observations is four
+    months, 120 quarterly observations is thirty years, and neither is the
+    ten-year window the board claims.
+    """
+    vals = [v for _, v in _monthly(rows, freq)[-window:]]
     if len(vals) < 12:
         return None
     x = vals[-1]
     return 100.0 * sum(1 for v in vals if v <= x) / len(vals)
 
 
-def zscore(rows: list[tuple[str, float]], window: int = 120) -> float | None:
-    vals = [v for _, v in rows[-window:]]
+def zscore(rows: list[tuple[str, float]], freq: str = "M", window: int = 120) -> float | None:
+    vals = [v for _, v in _monthly(rows, freq)[-window:]]
     if len(vals) < 12:
         return None
     mu = statistics.fmean(vals)
@@ -163,10 +173,17 @@ def series_payload(conn, series_id: str, *, years: float = 0, limit: int | None 
         "last": rows[-1][1] if rows else None,
         "last_period": rows[-1][0] if rows else None,
         "n_obs": len(rows),
-        "z": round(zscore(rows) or 0, 2) if rows else None,
-        "pct_rank": round(pct_rank(rows)) if rows else None,
+        "z": round(zscore(rows, row["frequency"]) or 0, 2) if rows else None,
+        "pct_rank": round(pct_rank(rows, row["frequency"])) if rows else None,
     }
     if row["layer"] == "composite":
+        meta = db.composite_meta(conn, series_id, rows[-1][0] if rows else None)
+        if meta:
+            payload["inputs_as_of"] = {
+                "oldest": meta["oldest_input"], "newest": meta["newest_input"],
+                "n_inputs": meta["n_inputs"],
+                "weight_covered": round(meta["weight_covered"], 2),
+            }
         inputs = db.composite_inputs(conn, series_id)
         payload["inputs"] = [
             {"id": i["input_id"], "weight": i["weight"], "sign": i["sign"],
@@ -186,6 +203,15 @@ def batch(conn, ids: list[str], *, years: float = 0) -> dict:
 # ---------------------------------------------------------------------------
 # overview: what the board's first screen needs
 # ---------------------------------------------------------------------------
+
+def _as_of(conn, composite_id: str, period: str) -> dict | None:
+    meta = db.composite_meta(conn, composite_id, period)
+    if not meta:
+        return None
+    return {"oldest": meta["oldest_input"], "newest": meta["newest_input"],
+            "n_inputs": meta["n_inputs"],
+            "weight_covered": round(meta["weight_covered"], 2)}
+
 
 def _signal_for(cid: str, value: float | None, pct: float | None) -> dict:
     if value is None:
@@ -236,7 +262,7 @@ def decompose(conn, snap, composite_id: str) -> list[dict]:
     out = []
     for i in inputs:
         rows = snap.get(i["input_id"], [])
-        z = zscore(rows) if rows else None
+        z = zscore(rows, cat.get(i["input_id"], {}).get("frequency", "M")) if rows else None
         contrib = (i["weight"] * i["sign"] * z / total) if z is not None else None
         out.append({
             "id": i["input_id"],
@@ -261,7 +287,7 @@ def overview(conn) -> dict:
         if not rows:
             continue
         val = rows[-1][1]
-        pct = pct_rank(rows)
+        pct = pct_rank(rows, cat[cid]["frequency"])
         chg = change(rows, 3)
         hero.append({
             "id": cid,
@@ -274,7 +300,8 @@ def overview(conn) -> dict:
             "signal": _signal_for(cid, val, pct),
             "spark": points(rows[-36:]),
             "method": cat[cid]["method_note"],
-            "decomposition": decompose(conn, snap, cid),
+"decomposition": decompose(conn, snap, cid),
+            "inputs_as_of": _as_of(conn, cid, rows[-1][0]),
         })
 
     regime_rows = []
@@ -352,10 +379,10 @@ def state(conn, snap, cat) -> list[dict]:
             "value": round(val, 3),
             "period": rows[-1][0],
             "chg_3m": (round(change(rows, 3), 3) if change(rows, 3) is not None else None),
-            "z": (round(zscore(rows), 2) if zscore(rows) is not None else None),
-            "pct_rank": (round(pct_rank(rows)) if pct_rank(rows) is not None else None),
+            "z": (round(zscore(rows, c["frequency"]), 2) if zscore(rows, c["frequency"]) is not None else None),
+            "pct_rank": (round(pct_rank(rows, c["frequency"])) if pct_rank(rows, c["frequency"]) is not None else None),
             "spark": points(rows[-36:]),
-            "signal": _signal_for(sid, val, pct_rank(rows)) if sid in AGGREGATES else None,
+            "signal": _signal_for(sid, val, pct_rank(rows, c["frequency"])) if sid in AGGREGATES else None,
         })
     return out
 
