@@ -149,12 +149,40 @@ Two rules make it safe to use:
 2. **Age is a column, not a footnote.** `daily_age` lets you filter to "cells younger than
    five days" instead of silently regressing on a carried-forward GDP print.
 
+The grid starts at **1990-01-01** by default. Industrial production reaches back to 1919, but
+everything else does not, and a panel that is 95% empty for seventy years invites regressions
+on carried-forward zeros. `python -m macroboard daily --start 1919-01-01` rebuilds the full
+sparse history if you want it.
+
 Because monthly prints only enter after the month closes, composites in the daily panel are
 one month behind the dashboard's state readout, which deliberately uses the in-progress
 month. That difference is stated here rather than smoothed over.
 
 Endpoints: `GET /api/daily/tape` (latest day, with ages), `GET /api/daily?start=&end=&ids=`
 (arrays, for analysis), `GET /api/daily.csv` (the whole table).
+
+### What a vintage is
+
+Every refresh writes a new **vintage**: a timestamped record of *what the world looked like
+when we pulled it*. The observation table is keyed on `(series_id, period, vintage_id)`, so
+the same month can hold several different values — one per vintage that saw it.
+
+A concrete example. On 2026-10-20 the BEA print for August core PCE was `130.455`. Suppose
+next month it is revised to `130.9`. After that refresh the database holds:
+
+| series | period | vintage | value |
+|---|---|---|---|
+| us.prices.pce_core | 2026-08 | #1 (2026-10-20) | 130.455 |
+| us.prices.pce_core | 2026-08 | #2 (2026-11-20) | 130.900 |
+
+Nothing is overwritten. `db.snapshot()` returns the newest values; `db.snapshot(vintage=1)`
+returns exactly what was on screen in October. That is what makes the board replayable —
+and it is the difference between a backtest and a story, because a backtest run on revised
+data is quietly cheating (this is the entire reason ALFRED exists next to FRED).
+
+There is exactly **one vintage** today (`#1`, 2026-10-20, 221,923 observations), so the
+machinery exists but has only one frame to replay. It becomes useful once `refresh` runs on a
+schedule: revisions then show up as a second vintage instead of silently changing history.
 
 ### Tracker
 

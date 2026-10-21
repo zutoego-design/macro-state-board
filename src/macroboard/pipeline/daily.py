@@ -142,6 +142,10 @@ def build(conn, *, start: str | None = None, verbose: bool = True) -> dict:
     )
     conn.commit()
 
+    # dropping and recreating the wide tables leaves free pages behind; without
+    # this the file keeps the size of the largest build it ever held
+    conn.execute("VACUUM")
+
     n_days = len(wide)
     n_series = len(mapping)
     if verbose:
@@ -153,11 +157,13 @@ def build(conn, *, start: str | None = None, verbose: bool = True) -> dict:
 
 
 def run(conn=None, *, start: str | None = None, verbose: bool = True) -> dict:
+    from .. import config
+
     conn = conn or db.connect()
     db.init(conn)
     db.upsert_series(conn, catalog.RAW + catalog.DERIVED + catalog.BREADTH + catalog.COMPOSITES)
     run_id = db.start_run(conn, "daily")
-    res = build(conn, start=start, verbose=verbose)
+    res = build(conn, start=start or config.DAILY_START, verbose=verbose)
     db.finish_run(conn, run_id, status="ok", n_series=res["cols"], n_rows=res["rows"],
                   detail=f"{res['start']}..{res['end']}")
     return res

@@ -11,6 +11,11 @@ CACHE_DIR = DATA / "cache"
 DB_PATH = Path(os.environ.get("MACRO_DB", DATA / "macroboard.db"))
 WEB = ROOT / "web"
 
+# Daily panel starts here by default. Industrial production goes back to 1919,
+# but the grid is 95% empty before the modern data set exists, and a sparse
+# panel invites accidental regressions on carried-forward zeros.
+DAILY_START = os.environ.get("MACRO_DAILY_START", "1990-01-01")
+
 HOST = os.environ.get("MACRO_HOST", "127.0.0.1")
 PORT = int(os.environ.get("MACRO_PORT", "8765"))
 

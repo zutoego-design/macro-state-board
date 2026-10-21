@@ -118,6 +118,12 @@ def cmd_status(_args) -> int:
     print(f"vintage  : {v.get('vintage_id')} at {v.get('as_of')} "
           f"({v.get('n_vintages', 0)} stored)")
     print(f"rows     : {conn.execute('SELECT COUNT(*) FROM observation').fetchone()[0]:,}")
+    vint_rows = conn.execute(
+        "SELECT vintage_id, as_of, n_obs FROM vintage ORDER BY vintage_id DESC LIMIT 5"
+    ).fetchall()
+    if vint_rows:
+        print("vintages : " + ", ".join(
+            f"#{r['vintage_id']} {r['as_of'][:16]} ({r['n_obs']:,} obs)" for r in vint_rows))
     by_layer = conn.execute(
         "SELECT layer, COUNT(*) n FROM series WHERE is_active=1 GROUP BY layer ORDER BY layer"
     ).fetchall()
@@ -168,7 +174,8 @@ def build_parser() -> argparse.ArgumentParser:
         sp = sub.add_parser(name)
         sp.set_defaults(func=fn)
     sp = sub.add_parser("daily")
-    sp.add_argument("--start", default=None, help="grid start date, YYYY-MM-DD")
+    sp.add_argument("--start", default=None,
+                    help="grid start date, YYYY-MM-DD (default 1990-01-01; use 1919-01-01 for the full sparse history)")
     sp.set_defaults(func=cmd_daily)
     sp = sub.add_parser("audit")
     sp.add_argument("--json", action="store_true")
