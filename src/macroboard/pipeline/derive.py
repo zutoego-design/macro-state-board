@@ -75,7 +75,7 @@ def run(conn=None, *, vintage: int | None = None, verbose: bool = True) -> dict:
             if verbose:
                 print(f"  skip {spec['series_id']:<26} inputs unavailable")
             continue
-        total += db.write_observations(conn, spec["series_id"], obs, vintage)
+        total += db.write_observations(conn, spec["series_id"], obs, vintage)["written"]
         if verbose:
             print(f"  ok   {spec['series_id']:<26} {len(obs):>6} obs  {obs[0][0]} .. {obs[-1][0]}")
     db.bump_vintage_count(conn, vintage)

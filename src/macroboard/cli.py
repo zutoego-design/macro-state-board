@@ -123,7 +123,7 @@ def cmd_status(_args) -> int:
     ).fetchall()
     if vint_rows:
         print("vintages : " + ", ".join(
-            f"#{r['vintage_id']} {r['as_of'][:16]} ({r['n_obs']:,} obs)" for r in vint_rows))
+            f"#{r['vintage_id']} {r['as_of'][:16]} ({r['n_obs']:,} delta)" for r in vint_rows))
     by_layer = conn.execute(
         "SELECT layer, COUNT(*) n FROM series WHERE is_active=1 GROUP BY layer ORDER BY layer"
     ).fetchall()

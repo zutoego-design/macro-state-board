@@ -86,7 +86,7 @@ def run(conn=None, *, vintage: int | None = None, verbose: bool = True) -> dict:
     produced = compute(verbose=verbose)
     total = 0
     for sid, obs in produced.items():
-        total += db.write_observations(conn, sid, obs, vintage)
+        total += db.write_observations(conn, sid, obs, vintage)["written"]
         if verbose:
             print(f"  ok   {sid:<26} {len(obs):>6} obs  {obs[0][0]} .. {obs[-1][0]}  "
                   f"last={obs[-1][1]:.3f}")

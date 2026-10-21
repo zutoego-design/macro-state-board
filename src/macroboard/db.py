@@ -184,18 +184,40 @@ def sync_active(conn, declared_ids: Iterable[str]) -> int:
 
 
 def write_observations(conn, series_id: str, observations: Sequence[tuple[str, float | None]],
-                       vintage_id: int, *, replace: bool = True, status: str = "final") -> int:
+                       vintage_id: int, *, replace: bool = True, status: str = "final",
+                       incremental: bool = True) -> dict:
+    """Write one series into one vintage, storing only what changed.
+
+    A vintage stores **deltas**: the periods that are new since the previous
+    vintage, plus the values that were revised. The first vintage therefore
+    holds the full history and every later one holds only the edge — which is
+    what keeps a daily refresh cheap, and what makes a revision visible as a
+    row rather than as an overwritten number.
+
+    Returns {"written": n, "new": n_new, "revised": n_rev, "unchanged": n}.
+    """
+    obs = [(p, v) for p, v in observations if v is not None]
+    prior: dict[str, float] = {}
+    if incremental and vintage_id > 1:
+        prior = series_asof(conn, series_id, vintage_id - 1)
+
+    fresh = [(p, v) for p, v in obs if p not in prior]
+    revised = [(p, v) for p, v in obs if p in prior and prior[p] != v]
+    rows = fresh + revised
+
     if replace:
         conn.execute("DELETE FROM observation WHERE series_id=? AND vintage_id=?",
                      (series_id, vintage_id))
-    rows = [(series_id, p, vintage_id, v, status) for p, v in observations]
-    conn.executemany(
-        "INSERT INTO observation (series_id, period, vintage_id, value, status) VALUES (?,?,?,?,?) "
-        "ON CONFLICT(series_id, period, vintage_id) DO UPDATE SET value=excluded.value, status=excluded.status",
-        rows,
-    )
+    if rows:
+        conn.executemany(
+            "INSERT INTO observation (series_id, period, vintage_id, value, status) "
+            "VALUES (?,?,?,?,?) ON CONFLICT(series_id, period, vintage_id) DO UPDATE SET "
+            "value=excluded.value, status=excluded.status",
+            [(series_id, p, vintage_id, v, status) for p, v in rows],
+        )
     conn.commit()
-    return len(rows)
+    return {"written": len(rows), "new": len(fresh), "revised": len(revised),
+            "unchanged": len(obs) - len(rows)}
 
 
 def bump_vintage_count(conn, vintage_id: int) -> int:
@@ -248,8 +270,10 @@ def composite_meta(conn, composite_id: str, period: str | None = None) -> dict |
 def snapshot(conn, vintage_id: int | None = None) -> dict[str, list[tuple[str, float]]]:
     """Every series as known at `vintage_id` (default: the latest snapshot).
 
-    Per series, the newest vintage <= vintage_id that actually carries rows
-    wins. That is what "as of" means, and it keeps partial ingest runs sane.
+    Reads the newest row per (series, period) with vintage_id <= the requested
+    one. That is what "as of" means, and it is the only formulation that works
+    once vintages are stored as deltas: a later vintage carries only the rows
+    that were new or revised, so nothing may be assumed about the rest.
     """
     if vintage_id is None:
         vintage_id = latest_vintage(conn) or 0
@@ -258,11 +282,14 @@ def snapshot(conn, vintage_id: int | None = None) -> dict[str, list[tuple[str, f
         SELECT o.series_id, o.period, o.value
         FROM observation o
         JOIN (
-            SELECT o2.series_id, MAX(o2.vintage_id) AS vid
+            SELECT o2.series_id, o2.period, MAX(o2.vintage_id) AS vid
             FROM observation o2
             WHERE o2.vintage_id <= ?
-            GROUP BY o2.series_id
-        ) pick ON pick.series_id = o.series_id AND pick.vid = o.vintage_id
+            GROUP BY o2.series_id, o2.period
+        ) pick
+          ON pick.series_id = o.series_id
+         AND pick.period    = o.period
+         AND pick.vid       = o.vintage_id
         WHERE o.value IS NOT NULL
         ORDER BY o.series_id, o.period
         """,
@@ -272,6 +299,25 @@ def snapshot(conn, vintage_id: int | None = None) -> dict[str, list[tuple[str, f
     for r in rows:
         out.setdefault(r["series_id"], []).append((r["period"], r["value"]))
     return out
+
+
+def series_asof(conn, series_id: str, vintage_id: int) -> dict[str, float]:
+    """One series as known at a vintage, as {period: value}."""
+    rows = conn.execute(
+        """
+        SELECT o.period, o.value
+        FROM observation o
+        JOIN (
+            SELECT period, MAX(vintage_id) AS vid
+            FROM observation
+            WHERE series_id = ? AND vintage_id <= ?
+            GROUP BY period
+        ) pick ON pick.period = o.period AND pick.vid = o.vintage_id
+        WHERE o.series_id = ?
+        """,
+        (series_id, vintage_id, series_id),
+    ).fetchall()
+    return {r["period"]: r["value"] for r in rows}
 
 
 def series(conn, series_id: str, vintage_id: int | None = None) -> list[tuple[str, float]]:

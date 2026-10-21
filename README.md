@@ -180,8 +180,20 @@ returns exactly what was on screen in October. That is what makes the board repl
 and it is the difference between a backtest and a story, because a backtest run on revised
 data is quietly cheating (this is the entire reason ALFRED exists next to FRED).
 
-There is exactly **one vintage** today (`#1`, 2026-10-20, 221,923 observations), so the
-machinery exists but has only one frame to replay. It becomes useful once `refresh` runs on a
+Vintages are stored as **deltas**. Vintage #1 holds the full history; every later one holds
+only the rows that were new or revised since the previous vintage. A refresh that changes
+nothing writes nothing, and one that picks up a week of prints writes a few dozen rows rather
+than 220,000. Reads resolve the newest row per `(series, period)` with `vintage_id <= n`.
+
+A real example from this database, not a hypothetical one. Vintage #1 pulled the S&P 500
+level for 2026-10-20 at 15:00 UTC — 11:00 in New York, **mid-session**. Vintage #2 pulled it
+again the next morning and stored `7712.57` against the earlier `7746.52`. The first number
+was an intraday quote wearing a close's clothes; the second is the settlement. Without
+vintages that correction would have silently overwritten history.
+
+There are **five vintages** today: `#1` with 221,923 rows of history, `#2` with a 46-row
+delta (38 new prints, 8 revisions), and three empty heartbeats from re-runs that found
+nothing new. That last part is the point: a refresh that changes nothing costs nothing. It becomes useful once `refresh` runs on a
 schedule: revisions then show up as a second vintage instead of silently changing history.
 
 ### Tracker

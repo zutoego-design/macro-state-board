@@ -28,12 +28,12 @@ def run(conn=None, *, verbose: bool = True) -> dict:
                 raise RuntimeError("provider returned no observations")
             clean = [(db.normalize_period(p, spec["frequency"]), v) for p, v in obs]
             clean = [(p, v) for p, v in clean if v is not None]
-            n = db.write_observations(conn, sid, clean, vintage)
-            rows_total += n
+            stats = db.write_observations(conn, sid, clean, vintage)
+            rows_total += stats['written']
             ok += 1
             if verbose:
-                print(f"  ok   {sid:<26} {n:>6} obs  {clean[0][0]} .. {clean[-1][0]}  "
-                      f"{time.time() - t0:5.1f}s")
+                delta = '+' + str(stats['new']) + (' ~' + str(stats['revised']) if stats['revised'] else '')
+                print(f"  ok   {sid:<26} {delta:>12}  {clean[0][0]} .. {clean[-1][0]}  {time.time() - t0:5.1f}s")
         except Exception as exc:  # one dead provider must not kill the run
             failed.append((sid, repr(exc)[:160]))
             if verbose:
@@ -47,5 +47,27 @@ def run(conn=None, *, verbose: bool = True) -> dict:
     if verbose:
         print(f"\n{ok}/{len(catalog.RAW)} series, {rows_total:,} rows, "
               f"{time.time() - started:.1f}s, vintage {vintage}")
+        _warn_if_market_open(conn, vintage)
     return {"vintage": vintage, "ok": ok, "failed": failed, "rows": rows_total,
             "declared": declared}
+
+
+def _warn_if_market_open(conn, vintage: int) -> None:
+    """Market prints taken during the session are provisional.
+
+    Yahoo returns the live price for the current day, so a mid-session pull
+    stores an intraday print as if it were a close. Vintage storage catches it
+    (the later pull shows up as a revision), but the reader deserves a warning
+    at the moment it happens.
+    """
+    import datetime as dt
+
+    now = dt.datetime.now(dt.timezone.utc)
+    if now.hour >= 21:          # after the 16:00 ET close
+        return
+    last = conn.execute(
+        "SELECT MAX(period) FROM obs_latest WHERE series_id LIKE 'us.market.%'"
+    ).fetchone()[0]
+    if last and last >= now.date().isoformat():
+        print(f"  note: US session still open at {now:%H:%M}Z — "
+              f"{last} market prints are intraday and will revise later")

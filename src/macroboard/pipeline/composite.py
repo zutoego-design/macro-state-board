@@ -166,7 +166,7 @@ def run(conn=None, *, vintage: int | None = None, verbose: bool = True) -> dict:
     for spec in catalog.COMPOSITES:
         obs = produced.get(spec["series_id"])
         if obs:
-            total += db.write_observations(conn, spec["series_id"], obs, vintage)
+            total += db.write_observations(conn, spec["series_id"], obs, vintage)["written"]
     for cid, rows_meta in meta.items():
         db.write_composite_meta(conn, rows_meta)
     db.bump_vintage_count(conn, vintage)

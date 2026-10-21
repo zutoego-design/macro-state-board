@@ -88,6 +88,12 @@ CREATE TABLE IF NOT EXISTS vintage (
 
 -- ------------------------------------------------------------
 -- Observations — the only unbounded table.
+--
+-- Vintages are stored as DELTAS: vintage #1 holds the full history, every
+-- later vintage holds only the rows that were new or revised since the one
+-- before it. Reads therefore resolve the newest row per (series, period)
+-- with vintage_id <= the requested one (see db.snapshot). A daily refresh
+-- costs a few dozen rows instead of a few hundred thousand.
 --   D -> YYYY-MM-DD   W -> YYYY-MM-DD (week ending)
 --   M -> YYYY-MM      Q -> YYYY-Qn     A -> YYYY
 -- ------------------------------------------------------------
